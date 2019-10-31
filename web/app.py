@@ -10,8 +10,8 @@ import spacy
 app = Flask(__name__)
 api = Api(app)
 
-# client = MongoClient("mongodb://db:27017")
-client = MongoClient("127.0.0.1:27017")
+client = MongoClient("mongodb://db:27017")
+# client = MongoClient("127.0.0.1:27017")
 
 db = client.SimilarityDB
 users = db["Users"]
