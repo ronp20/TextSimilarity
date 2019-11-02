@@ -1,7 +1,6 @@
 import enum
 from flask import Flask, jsonify, request
 from flask_restful import Api, Resource
-from numpy import memmap
 from pymongo import MongoClient
 import bcrypt
 import spacy
@@ -37,6 +36,7 @@ class JsonSyntax:
     static_text1 = "text1"
     static_text2 = "text2"
     static_tokens = "tokens"
+    static_admin_user = "admin_user"
 
     @staticmethod
     def message(message: str, http_return_code: HttpStatus):
@@ -93,6 +93,7 @@ class Register(Resource):
             username:
             password
         }
+        register user
         :return: jsonify message
         """
         posted_data = request.get_json()
@@ -126,7 +127,7 @@ class Detect(Resource):
         :param posted_data: dict of posted data
         :return: http status
         """
-        if posted_data[JsonSyntax.static_pw] and posted_data[JsonSyntax.static_user_name] and posted_data[JsonSyntax.static_text1] and posted_data[JsonSyntax.static_text2]:
+        if JsonSyntax.static_pw in posted_data and JsonSyntax.static_user_name in posted_data and JsonSyntax.static_text1 in posted_data and JsonSyntax.static_text2 in posted_data:
             return HttpStatus.OK
 
         return HttpStatus.INVALID_JSON
@@ -141,7 +142,8 @@ class Detect(Resource):
             text1:
             text2:
         }
-        :return:
+        Check similarty between text1 and text 2
+        :return: json message
         """
         posted_data = request.get_json()
         http_status = self.__is_valid(posted_data)
@@ -155,7 +157,7 @@ class Detect(Resource):
             return jsonify(JsonSyntax.message("Wrong Password", HttpStatus.INVALID_PW)) if user_data[0] == HttpStatus.INVALID_PW else jsonify(JsonSyntax.message("User not exists", HttpStatus.INVALID_USER))
 
         #check amount of tokens
-        current_tokens = user_data[1][JsonSyntax.static_tokens]
+        current_tokens = user_data[1][str(JsonSyntax.static_tokens)]
         if current_tokens == 0:
             return jsonify(JsonSyntax.message("Out of tokens", HttpStatus.OUT_OF_TOKENS))
 
@@ -183,9 +185,57 @@ class Detect(Resource):
         return jsonify(JsonSyntax.message(message, HttpStatus.OK))
 
 
+class AddTokens(Resource):
+    def __is_valid(self, posted_data: dict):
+        """
+        helper function that checks for register validation
+        :param posted_data: dict of posted data
+        :return: http status
+        """
+
+        if JsonSyntax.static_pw in posted_data and JsonSyntax.static_user_name in posted_data and JsonSyntax.static_admin_user in posted_data and JsonSyntax.static_tokens in posted_data:
+            return HttpStatus.OK
+
+        return HttpStatus.INVALID_JSON
+
+    def post(self):
+        """
+
+        :return:
+        """
+        posted_data = request.get_json()
+        if self.__is_valid(posted_data) == HttpStatus.INVALID_JSON:
+            return jsonify(JsonSyntax.message("Invalid input", HttpStatus.INVALID_JSON))
+
+        admin_user = posted_data[str(JsonSyntax.static_admin_user)]
+        hashad_pw = posted_data[str(JsonSyntax.static_pw)]
+        admin_data = Register.log_in(admin_user, hashad_pw)
+        if admin_data[0] != HttpStatus.OK:
+            return jsonify(JsonSyntax.message("Wrong Password", HttpStatus.INVALID_PW)) if admin_data[0] == HttpStatus.INVALID_PW else jsonify(JsonSyntax.message("User not exists", HttpStatus.INVALID_USER))
+
+        user_name = posted_data[JsonSyntax.static_user_name]
+        user = users.find_one({JsonSyntax.static_user_name: user_name})
+        if user is None:
+            message = "{} is not exists".format(user_name)
+            return jsonify(JsonSyntax.message(message, HttpStatus.INVALID_USER))
+
+        user_tokens = user[str(JsonSyntax.static_tokens)]
+        user_tokens += posted_data[JsonSyntax.static_tokens]
+        users.update({
+            JsonSyntax.static_user_name: user_name
+        }, {
+                "$set": {
+                    JsonSyntax.static_tokens: user_tokens
+                }
+        })
+
+        message = "{} has now {} tokens".format(user_name, user_tokens)
+        return jsonify(JsonSyntax.message(message, HttpStatus.OK))
+
+
 api.add_resource(Register, "/register")
 api.add_resource(Detect, "/detect")
-
+api.add_resource(AddTokens, "/addtokens")
 
 if __name__ == "__main__":
     app.run(host='0.0.0.0')
